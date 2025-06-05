@@ -1,0 +1,309 @@
+---
+title: "Climate Justice and Erosion"
+author: "Colin Lenoble"
+date: "2025-06-04"
+format: 
+    html:
+        code-fold: true
+jupyter : python3
+---
+
+## Introduction 
+
+L'érosion littorale est un phénomène causé par des actions humaines et naturelles.
+Les principales causes de l'érosion littorale sont :
+
+- l'action des vagues et des courants marins ;
+
+- les marées et tempêtes ;
+
+- l'élévation du niveau de la mer ;
+
+- les aménagements côtiers (digues, ports, urbanisation) ;
+
+- l'extraction de sable.
+
+Le changement climatique a déjà causé une élévation du niveau de la mer de 20 cm depuis 1900 par le biais de la fonte des glaciers et de la dilatation thermique des océans.
+Il est estimé que le niveau de la mer pourrait augmenter autour de 1 mètre d'ici 2100.
+
+## Dispositifs réglementaires 
+
+La France a progressivement mis en place des dispositifs réglementaires pour lutter contre l'érosion littorale.
+- **Loi Littoral de 1996** : vise à protéger les espaces littoraux et à encadrer l'urbanisation.
+- **Plan de Prévention des Risques Littoraux (PPRL)** : élaboré par les préfets, il identifie les zones à risque et impose des règles d'urbanisme.
+- **Loi Climat et Résilience de 2021** : qui comporte des mesures telles que l'identification des communes exposées au recul du trait de côte.
+
+## Problématique
+
+L'inscription sur le décret se fait sur la base du **volontariat** des communes.
+En 2024, 30% des communes littorales françaises "métropolitaines" étaient inscrites sur le décret.
+
+L'inscription permet de recevoir des financements pour la création de cartes d'exposition à fine échelle pour des horizons temporels de 30 et 100 ans. En contrepartie, des restrictions d'urbanisme sont imposées, notamment l'interdiction de construire dans les zones identifiées comme à risque. Des outils juridiques comme un bail réel d'adaptation au recul du trait de côte ou des mesures pour faciliter la relocalisation des activités et des populations sont également prévus.
+
+### Questions de recherche
+
+1. Comment l’adaptation à l'érosion littorale et à la montée du niveau des mers est-elle envisagée dans les textes de loi ?  
+
+2. Les territoires identifiés dans le décret Article L321-15 comprennent-ils bien tous les territoires à risque ?  
+
+3. Y-a-t-il des différences socio-économiques (revenus, inégalités, population...) ou politiques entre les territoires à risque compris dans le décret ou pas ? 
+
+4. Quelle approche législative alternative pourrait davantage prendre en compte les questions d’équité entre les communes ?   
+
+## Approche quantitative
+
+Dans un premier temps, nous allons analyser le territoire métropolitain mais nous pourrons étendre l'analyse à la France d'outre-mer.
+
+### Carte interactive des communes littorales
+
+```{python}
+#| echo: false
+#| warning: false
+import pandas as pd
+import numpy as np
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
+import cartopy.crs as ccrs
+import folium
+import os
+import seaborn as sns
+
+communes_littorales = gpd.read_file("../data/communes_littorales/communes_littorales.shp")
+communes_littorales['INSEE_COM'] = communes_littorales['INSEE_COM'].astype(str).str.zfill(5)
+comm_decret_2022 = pd.read_csv("../data/communes_littorales/comm_decret_2022.txt", header=None).squeeze().tolist()
+comm_decret_2022 = [str(x).zfill(5) for x in comm_decret_2022]  # Ensure all codes are 5 digits
+comm_decret_2023 = pd.read_csv("../data/communes_littorales/comm_decret_2023.txt", header=None).squeeze().tolist()
+comm_decret_2024 = pd.read_csv("../data/communes_littorales/comm_decret_2024.txt", header=None).squeeze().tolist()
+comm_2022_not_2023 = communes_littorales[communes_littorales['INSEE_COM'].isin(set(comm_decret_2022) - set(comm_decret_2023))]
+comm_2023_not_20224= communes_littorales[communes_littorales['INSEE_COM'].isin(set(comm_decret_2023) - set(comm_decret_2024))]
+comm_off = pd.concat([comm_2022_not_2023, comm_2023_not_20224]).drop_duplicates()
+
+
+communes_littorales["decret_2022"] = communes_littorales["INSEE_COM"].isin(comm_decret_2022)
+communes_littorales["decret_2023"] = communes_littorales["INSEE_COM"].isin(comm_decret_2023)
+communes_littorales["decret_2024"] = communes_littorales["INSEE_COM"].isin(comm_decret_2024)
+
+c1 = '#ccff33'
+c2 = '#70e000'
+c3 = '#00b300'
+c4 = '#d00000'
+c5 = 'grey'
+
+communes_littorales['color'] = np.where(communes_littorales['INSEE_COM'].isin(comm_off.INSEE_COM), c4,
+    np.where(communes_littorales['INSEE_COM'].isin(comm_decret_2022), c1,
+    np.where(communes_littorales['INSEE_COM'].isin(comm_decret_2023), c2,
+             np.where(communes_littorales['INSEE_COM'].isin(comm_decret_2024), c3, c5))))# Create a folium map with different colors based on vulnerability and decree status
+m = folium.Map(location=[46.5, 2], zoom_start=5, tiles='OpenStreetMap')
+
+def style_function(feature):
+    color = feature['properties']['color']
+    return {
+        'fillColor': color,
+        'color': color,
+        'weight': 1,
+        'fillOpacity': 0.5
+    }
+
+def highlight_function(feature):
+    return {
+        'weight': 3,
+        'color': '#666',
+        'fillOpacity': 0.7
+    }
+
+# Add the GeoDataFrame to the map with the style function and popup showing the commune name
+folium.GeoJson(
+    communes_littorales,
+    style_function=style_function,
+    highlight_function=highlight_function,
+    tooltip=folium.GeoJsonTooltip(fields=['NOM_COM'], aliases=['Commune:'])
+).add_to(m)
+
+# Add ADM1 (département) borders
+
+
+#add a legend to explain what are the colors
+# m.add_child(folium.LayerControl())
+# Add a legend to the map
+legend_html = f"""
+<div style="position: fixed; 
+    bottom: 50px; left: 50px; width: 270px; height: 140px; 
+    background-color: white; z-index:9999; 
+    font-size:14px; padding: 10px;">
+    <b>Legend</b><br>
+    <i style="display: inline-block; width: 14px; height: 14px; background: {c1}; margin-right: 5px; border:1px solid #888;"></i> In the decree since 2022<br>
+    <i style="display: inline-block; width: 14px; height: 14px; background: {c2}; margin-right: 5px; border:1px solid #888;"></i> Joined in 2023<br>
+    <i style="display: inline-block; width: 14px; height: 14px; background: {c3}; margin-right: 5px; border:1px solid #888;"></i> Joined in 2024<br>
+    <i style="display: inline-block; width: 14px; height: 14px; background: {c4}; margin-right: 5px; border:1px solid #888;"></i> Once in the decree but left<br>
+    <i style="display: inline-block; width: 14px; height: 14px; background: {c5}; margin-right: 5px; border:1px solid #888;"></i> Not in the decree<br>
+</div>
+"""
+
+m.get_root().html.add_child(folium.Element(legend_html))
+
+# Add a title to the map
+title_html = """
+<div style="position: fixed; 
+    top: 10px; left: 50%; transform: translateX(-50%); 
+    background-color: white; z-index:9999; 
+    font-size:20px; text-align: center; font-weight: bold; 
+    padding: 5px; box-shadow: 0px 4px 6px rgba(0, 0, 0, 0.1);">
+    Communes littorales in the decree on coastal erosion
+</div>
+"""
+
+m.get_root().html.add_child(folium.Element(title_html))
+
+# Add a scale bar to the map
+m.add_child(folium.LatLngPopup())
+
+# Display the map
+m
+```
+
+```{python}
+#| echo: false
+#| warning: false
+communes_littorales['departement'] = communes_littorales['INSEE_COM'].str[:2]
+
+com_dep = communes_littorales.groupby(['departement', 'color']).size().reset_index(name='count')
+com_dep['share'] = com_dep['count'] / com_dep.groupby('departement')['count'].transform('sum')
+# Keep only rows with color in [c1, c2, c3]
+com_dep = com_dep[com_dep['color'].isin([c1, c2, c3])]
+com_dep['total_in'] = com_dep.groupby('departement')['share'].transform('sum')
+#order by total_in
+com_dep = com_dep.sort_values(by='total_in', ascending=True)
+
+fig, ax = plt.subplots(figsize=(10, 6))
+# Get the unique colors present in the data, in the order of c1, c2, c3
+color_order = ['#00b300', '#70e000', '#ccff33']
+com_dep.loc[com_dep['color'] == c1, 'color'] = 'Joined in 2022'
+com_dep.loc[com_dep['color'] == c2, 'color'] = 'Joined in 2023'
+com_dep.loc[com_dep['color'] == c3, 'color'] = 'Joined in 2024'
+com_dep = com_dep.rename(columns={'color': 'Year Joined'})
+
+# Pivot and reindex to match the order in com_dep
+departement_order = com_dep['departement'].unique()
+com_dep_pivot = com_dep.pivot(index='departement', columns='Year Joined', values='share').reindex(departement_order)
+com_dep_pivot.plot(
+    kind='barh', stacked=True, ax=ax, color=color_order
+)
+ax.set_xlabel('Share of communes of the department in the decree')
+ax.set_ylabel('Department')
+```
+
+## Analyse des données 
+
+![Analyse des données CEREMA](figures/communes_littorales_analysis_cerema.png)
+
+## Cat Nat data
+
+```{python}
+#| echo: false
+#| warning: false
+
+OUTPUT_DIR = "../../Data/CATNAT/csv_arretes"
+df_catnat = pd.read_csv(os.path.join(OUTPUT_DIR, "merged_arretes.csv"), sep=';')
+df_catnat = df_catnat[df_catnat['Nom du péril'].isin(["Chocs Mécaniques liés à l'action des Vagues"])]
+df_catnat['Nom du péril'].value_counts()
+df_catnat['N° Insee'] = df_catnat['N° Insee'].astype(str).str.zfill(5)
+
+df_catnat = df_catnat[['N° Insee', 'Décision']].groupby(['N° Insee', 'Décision']).size().reset_index(name='count')
+df_catnat.loc[df_catnat['Décision'].str.contains('Reconnue'), 'Décision'] = 'Reconnue'
+df_catnat = df_catnat.groupby(['N° Insee', 'Décision']).sum().reset_index()
+df_catnat = df_catnat.pivot(index='N° Insee', columns='Décision', values='count').reset_index()
+df_catnat = df_catnat.fillna(0)
+df_catnat['Non reconnue'] = df_catnat['Reconnue']/ (df_catnat['Reconnue'] + df_catnat['Non reconnue'])
+df_catnat = df_catnat.rename(columns={'N° Insee': 'INSEE_COM', 'Non reconnue': 'taux'})
+
+df_comm = communes_littorales.merge(df_catnat, on='INSEE_COM', how='left')
+df_comm['taux'] = df_comm['taux'].fillna(0)
+df_comm['Reconnue'] = df_comm['Reconnue'].fillna(0)
+
+#two violin plots with the taux of non reconnue for communes in the decree and not in the decree
+
+fig, ax = plt.subplots(1 , 2, figsize=(9,5))
+
+sns.violinplot(
+    x='decret_2024', y='Reconnue', data=df_comm, ax=ax[0],
+    palette=['lightblue', 'lightcoral'], inner='quart', split=True, cut=0, bw=0.2
+)
+ax[0].set_title('Number of CatNat recognized by decree status')
+ax[0].set_xlabel('')
+ax[0].set_ylabel('Number of CatNat recognized')
+
+sns.violinplot(
+    x='decret_2024', y='taux', data=df_comm, ax=ax[1],
+    palette=['lightblue', 'lightcoral'], inner='quart', split=True, cut=0, bw=0.2
+)
+ax[1].set_title('Rate of CatNat recognized by decree status')
+ax[1].set_xlabel('')
+ax[1].set_ylabel('Rate of CatNat recognized')
+
+plt.tight_layout()
+```	
+
+## Données socio-économiques
+
+```{python}
+#| echo: false
+#| warning: false
+
+rev = pd.read_csv('../data/FILO2021_DISP_COM.csv', sep=';')
+year = '2021'
+rev = rev[['CODGEO', f'NBMEN{str(year)[2:]}', f'NBPERS{str(year)[2:]}', f'NBUC{str(year)[2:]}',
+                f'Q2{str(year)[2:]}', f'GI{str(year)[2:]}']]
+rev.columns = ['CODGEO','Menages','Population','UC','Med_Niveau_vie','Gini']
+rev['Year'] = str(year)
+
+import seaborn as sns
+comm_disp = communes_littorales.merge(rev, left_on='INSEE_COM', right_on='CODGEO', how='left')
+fig, ax = plt.subplots(1, 3, figsize=(9,5))
+
+
+#replace 's' by nan
+comm_disp['Med_Niveau_vie'] = comm_disp['Med_Niveau_vie'].replace('s', np.nan)
+comm_disp['Gini'] = comm_disp['Gini'].replace('s', np.nan)
+# Replace 'nd' by NaN
+comm_disp['Med_Niveau_vie'] = comm_disp['Med_Niveau_vie'].replace('nd', np.nan)
+comm_disp['Gini'] = comm_disp['Gini'].replace('nd', np.nan)
+
+comm_disp['Population'] = comm_disp['Population'].replace('s', np.nan)
+comm_disp['Population'] = comm_disp['Population'].replace('nd', np.nan)
+
+# Replace commas with dots in 'Med_Niveau_vie' and convert to float
+comm_disp['Med_Niveau_vie'] = comm_disp['Med_Niveau_vie'].str.replace(',', '.').astype(float)
+# Replace commas with dots in 'Gini' and convert to float
+comm_disp['Gini'] = comm_disp['Gini'].str.replace(',', '.').astype(float)
+# Replace commas with dots in 'Population' and convert to float
+comm_disp['Population'] = comm_disp['Population'].str.replace(',', '.').astype(float)
+comm_disp['Population'] = np.log(comm_disp['Population'])  # Log-transform the population for better visualization
+# Replace commas with dots in 'Menages' and convert to float
+
+sns.violinplot(x='decret_2024', y='Med_Niveau_vie', data=comm_disp, ax=ax[0], palette=['lightblue', 'lightcoral'])
+ax[0].set_title('Median disposable income by commune')
+#make horizontal lines for the medians fo each group
+ax[0].axhline(y=comm_disp[comm_disp['decret_2024'] == 0]['Med_Niveau_vie'].median(), color='blue', linestyle='--', label='Median non-decret')
+ax[0].axhline(y=comm_disp[comm_disp['decret_2024'] == 1]['Med_Niveau_vie'].median(), color='red', linestyle='--', label='Median decret')
+ax[0].legend()
+
+sns.violinplot(x='decret_2024', y='Gini', data=comm_disp, ax=ax[1], palette=['lightblue', 'lightcoral'])
+ax[1].set_title('Gini index by commune')
+#make horizontal lines for the medians fo each group
+ax[1].axhline(y=comm_disp[comm_disp['decret_2024'] == 0]['Gini'].median(), color='blue', linestyle='--', label='Median non-decret')
+ax[1].axhline(y=comm_disp[comm_disp['decret_2024'] == 1]['Gini'].median(), color='red', linestyle='--', label='Median decret')
+ax[1].legend()
+
+sns.violinplot(x='decret_2024', y='Population', data=comm_disp, ax=ax[2], palette=['lightblue', 'lightcoral'])
+ax[2].set_ylabel('Log(Population)')
+ax[2].set_title('Population by commune')
+#make horizontal lines for the medians fo each group
+ax[2].axhline(y=comm_disp[comm_disp['decret_2024'] == 0]['Population'].median(), color='blue', linestyle='--', label='Median non-decret')
+ax[2].axhline(y=comm_disp[comm_disp['decret_2024'] == 1]['Population'].median(), color='red', linestyle='--', label='Median decret')
+ax[2].legend()
+
+#plt.tight_layout()
+```
+
+
